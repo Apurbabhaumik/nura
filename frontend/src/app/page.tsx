@@ -16,6 +16,7 @@ import { AssessmentTab } from '../components/AssessmentTab';
 import { AnalyticsTab } from '../components/AnalyticsTab';
 import { AuthModal } from '../components/AuthModal';
 import { Footer } from '../components/Footer';
+import { CommandPalette } from '../components/CommandPalette';
 
 export default function NuraApp() {
   // Navigation & User State
@@ -23,6 +24,7 @@ export default function NuraApp() {
   const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
 
   // Auth Form State
   const [email, setEmail] = useState('');
@@ -76,6 +78,15 @@ export default function NuraApp() {
       setUser({ id: 'demo-user-1', name: 'Student Developer', email: 'student@nura.ai' });
     }
     loadMockCourses();
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowCommandPalette((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
   const loadMockCourses = () => {
@@ -414,6 +425,12 @@ export default function NuraApp() {
         setName={setName}
         authError={authError}
         onSubmit={handleAuthSubmit}
+      />
+
+      <CommandPalette 
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        setActiveTab={setActiveTab}
       />
     </div>
   );
