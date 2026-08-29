@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: teachstack-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: teachstack_user
+      POSTGRES_PASSWORD: secure_dev_password
+      POSTGRES_DB: teachstack_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teachstack_user -d teachstack_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: teachstack-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: teachstack-qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: teachstack-backend
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://teachstack_user:secure_dev_password@postgres:5432/teachstack_db?schema=public"
+      JWT_SECRET: "teachstack-prod-jwt-secret-889900"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      QDRANT_URL: "http://qdrant:6333"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: teachstack-frontend
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://backend:3000/api"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:

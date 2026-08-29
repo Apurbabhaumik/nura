@@ -1,0 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* Ultra-Minimalist Monochromatic Palette (Linear/Vercel Vibe) */
+  --bg-primary: #000000;
+  --bg-secondary: #050505;
+  --bg-card: #080808;
+  
+  --text-primary: #ffffff;
+  --text-secondary: #888888; /* Monochromatic Grey */
+  --text-muted: #444444; /* Darker Grey */
+  
+  /* Monochromatic accents instead of neon colors */
+  --accent-primary: #ffffff;
+  --accent-muted: #222222;
+  
+  --border-light: #222222; /* Very thin, dark border */
+  --border-hover: #444444;
+  
+  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  
+  --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography Hierarchy */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-sans);
+  font-weight: 800; /* Extremely stark weights */
+  letter-spacing: -0.05em; /* Tighter tracking for modern feel */
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.mono-text, .eyebrow {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Base Interactions */
+a, button {
+  cursor: pointer;
+  outline: none;
+  transition: var(--transition-smooth);
+}
+
+::selection {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 0px; /* Square scrollbar */
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Keyframe Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fade-up {
+  opacity: 0; /* Ensure it starts hidden */
+  animation: fadeInUp 0.8s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+
+.delay-100 { animation-delay: 150ms; }
+.delay-200 { animation-delay: 300ms; }
+.delay-300 { animation-delay: 450ms; }
+
+@keyframes marquee { 
+  0% { transform: translateX(0%); } 
+  100% { transform: translateX(-50%); } 
+}
+
+@keyframes float { 
+  0% { transform: translateY(0px); } 
+  50% { transform: translateY(-5px); } /* More subtle float */
+  100% { transform: translateY(0px); } 
+}

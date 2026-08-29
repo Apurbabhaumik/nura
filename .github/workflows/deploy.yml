@@ -1,0 +1,65 @@
+name: TeachStack DevOps Deployment Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test Applications
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install & Test Backend
+        run: |
+          cd backend
+          npm ci
+          npx prisma generate
+          npm run build
+
+      - name: Install & Test Frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+  deploy-aws-ecs:
+    name: Deploy Container Images to AWS ECS
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Backend Image
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/teachstack-backend:latest -f Dockerfile.backend .
+          docker push ${{ steps.login-ecr.outputs.registry }}/teachstack-backend:latest
+
+      - name: Build and Push Frontend Image
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/teachstack-frontend:latest -f Dockerfile.frontend .
+          docker push ${{ steps.login-ecr.outputs.registry }}/teachstack-frontend:latest
+
+      - name: Force ECS Fargate Deployment
+        run: |
+          aws ecs update-service --cluster teachstack-cluster --service teachstack-backend-service --force-new-deployment

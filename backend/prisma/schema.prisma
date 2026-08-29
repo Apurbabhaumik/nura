@@ -1,0 +1,150 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String      @id @default(uuid())
+  name         String
+  email        String      @unique
+  passwordHash String
+  role         String      @default("STUDENT")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  workspaces   Workspace[]
+  chats        Chat[]
+  progress     Progress[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  courses   Course[]
+
+  @@map("workspaces")
+}
+
+model Course {
+  id          String   @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  difficulty  String   @default("intermediate")
+  visibility  String   @default("private")
+  thumbnail   String?
+  createdAt   DateTime @default(now())
+  modules     Module[]
+  uploads     Upload[]
+  chats       Chat[]
+
+  @@map("courses")
+}
+
+model Module {
+  id        String   @id @default(uuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  order     Int      @default(1)
+  lessons   Lesson[]
+
+  @@map("modules")
+}
+
+model Lesson {
+  id            String      @id @default(uuid())
+  moduleId      String
+  module        Module      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title         String
+  markdown      String
+  estimatedTime Int         @default(15)
+  quizzes       Quiz[]
+  flashcards    Flashcard[]
+  progress      Progress[]
+
+  @@map("lessons")
+}
+
+model Upload {
+  id        String   @id @default(uuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  filename  String
+  type      String
+  status    String   @default("PENDING")
+  s3Key     String?
+  createdAt DateTime @default(now())
+
+  @@map("uploads")
+}
+
+model Quiz {
+  id        String     @id @default(uuid())
+  lessonId  String
+  lesson    Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  difficulty String   @default("medium")
+  timeLimit Int        @default(600)
+  createdAt DateTime   @default(now())
+  questions Question[]
+
+  @@map("quizzes")
+}
+
+model Question {
+  id       String @id @default(uuid())
+  quizId   String
+  quiz     Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  question String
+  answer   String
+  options  String // JSON string of options array
+  type     String @default("MCQ") // MCQ | CODING | SUBJECTIVE
+
+  @@map("questions")
+}
+
+model Flashcard {
+  id       String @id @default(uuid())
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  front    String
+  back     String
+
+  @@map("flashcards")
+}
+
+model Chat {
+  id        String   @id @default(uuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  citations String?  // JSON string of source citations
+  createdAt DateTime @default(now())
+
+  @@map("chats")
+}
+
+model Progress {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId   String
+  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  percentage Int      @default(0)
+  completed  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  @@map("progress")
+}
