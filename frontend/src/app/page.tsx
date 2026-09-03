@@ -94,11 +94,9 @@ export default function NuraApp() {
   const handleFileSelect = async (file: File) => {
     if (file.size > 50 * 1024 * 1024) { setAuthError('File is larger than 50MB.'); return; }
     setAuthError('');
-    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const step = 0x8000;
-    for (let i = 0; i < bytes.length; i += step) binary += String.fromCharCode(...bytes.subarray(i, i + step));
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     setIngestFileContent(btoa(binary));
   };
 
@@ -108,13 +106,8 @@ export default function NuraApp() {
     setIsProcessing(true); setProcessingStep(1); setAuthError('');
     try {
       setProcessingStep(2);
-      const course = await fetchApi<any>('/course/generate-from-ingestion', {
-        method: 'POST',
-        body: JSON.stringify({ workspaceId: selectedWorkspaceId, url: ingestUrl || undefined, filename: ingestFilename || undefined, fileContent: ingestFileContent || undefined }),
-      });
-      setCourses((prev) => [course, ...prev]);
-      setActiveCourse(course);
-      setSelectedLesson(course.modules?.[0]?.lessons?.[0] || null);
+      const course = await fetchApi<any>('/course/generate-from-ingestion', { method: 'POST', body: JSON.stringify({ workspaceId: selectedWorkspaceId, url: ingestUrl || undefined, filename: ingestFilename || undefined, fileContent: ingestFileContent || undefined }) });
+      setCourses((prev) => [course, ...prev]); setActiveCourse(course); setSelectedLesson(course.modules?.[0]?.lessons?.[0] || null);
       setProcessingStep(4); setIngestUrl(''); setIngestFilename(''); setIngestFileContent(''); setActiveTab('reader');
     } catch (err: any) { setAuthError(err.message || 'Ingestion failed.'); }
     finally { setIsProcessing(false); }
@@ -152,7 +145,7 @@ export default function NuraApp() {
       {activeTab === 'analytics' && <div className="animate-fade-up"><AnalyticsTab stats={dashboardStats} /></div>}
     </main>
     <Footer />
-    <AuthModal show={showAuthModal} onClose={() => setShowAuthModal(false)} authMode={authMode} setAuthMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={password} name={name} setName={setName} authError={authError} onSubmit={handleAuthSubmit} />
+    <AuthModal show={showAuthModal} onClose={() => setShowAuthModal(false)} authMode={authMode} setAuthMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} name={name} setName={setName} authError={authError} onSubmit={handleAuthSubmit} />
     <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} setActiveTab={setActiveTab} />
   </div>;
 }
