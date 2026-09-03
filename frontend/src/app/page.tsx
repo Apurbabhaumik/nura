@@ -35,6 +35,7 @@ export default function NuraApp() {
   const [selectedLesson, setSelectedLesson] = useState<any>(null);
   const [ingestUrl, setIngestUrl] = useState('');
   const [ingestFilename, setIngestFilename] = useState('');
+  const [ingestFileContent, setIngestFileContent] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
   const [chatInput, setChatInput] = useState('');
@@ -63,9 +64,7 @@ export default function NuraApp() {
   };
 
   useEffect(() => {
-    if (getStoredToken()) {
-      loadData().catch(() => { removeStoredToken(); setUser(null); });
-    }
+    if (getStoredToken()) loadData().catch(() => { removeStoredToken(); setUser(null); });
     const keyHandler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setShowCommandPalette((v) => !v); }
     };
@@ -77,67 +76,59 @@ export default function NuraApp() {
     if (selectedWorkspaceId && getStoredToken()) loadData(selectedWorkspaceId).catch(() => undefined);
   }, [selectedWorkspaceId]);
 
-  const handleAutoFillAuth = () => {
-    setEmail('student@nura.ai');
-    setPassword('password123');
-    setAuthMode('login');
-    setShowAuthModal(true);
-  };
+  const handleAutoFillAuth = () => { setEmail('student@nura.ai'); setPassword('password123'); setAuthMode('login'); setShowAuthModal(true); };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     try {
-      if (authMode === 'register') {
-        await fetchApi('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
-      }
+      if (authMode === 'register') await fetchApi('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
       const res = await fetchApi<any>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
       setStoredToken(res.accessToken);
       setUser(res.user);
       setShowAuthModal(false);
       await loadData();
-    } catch (err: any) {
-      setAuthError(err.message || 'Authentication failed.');
-    }
+    } catch (err: any) { setAuthError(err.message || 'Authentication failed.'); }
+  };
+
+  const handleFileSelect = async (file: File) => {
+    if (file.size > 50 * 1024 * 1024) { setAuthError('File is larger than 50MB.'); return; }
+    setAuthError('');
+    const buffer = await file.arrayBuffer();
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const step = 0x8000;
+    for (let i = 0; i < bytes.length; i += step) binary += String.fromCharCode(...bytes.subarray(i, i + step));
+    setIngestFileContent(btoa(binary));
   };
 
   const handleTriggerIngestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedWorkspaceId || (!ingestUrl && !ingestFilename)) return;
-    setIsProcessing(true);
-    setProcessingStep(1);
+    if (!selectedWorkspaceId || (!ingestUrl && !ingestFileContent)) return;
+    setIsProcessing(true); setProcessingStep(1); setAuthError('');
     try {
       setProcessingStep(2);
       const course = await fetchApi<any>('/course/generate-from-ingestion', {
         method: 'POST',
-        body: JSON.stringify({ workspaceId: selectedWorkspaceId, url: ingestUrl || undefined, filename: ingestFilename || undefined }),
+        body: JSON.stringify({ workspaceId: selectedWorkspaceId, url: ingestUrl || undefined, filename: ingestFilename || undefined, fileContent: ingestFileContent || undefined }),
       });
       setCourses((prev) => [course, ...prev]);
       setActiveCourse(course);
       setSelectedLesson(course.modules?.[0]?.lessons?.[0] || null);
-      setProcessingStep(4);
-      setIngestUrl('');
-      setIngestFilename('');
-      setActiveTab('reader');
-    } catch (err: any) {
-      setAuthError(err.message || 'Ingestion failed.');
-    } finally {
-      setIsProcessing(false);
-    }
+      setProcessingStep(4); setIngestUrl(''); setIngestFilename(''); setIngestFileContent(''); setActiveTab('reader');
+    } catch (err: any) { setAuthError(err.message || 'Ingestion failed.'); }
+    finally { setIsProcessing(false); }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || !activeCourse) return;
     const question = chatInput.trim();
-    setChatMessages((prev) => [...prev, { sender: 'user', text: question }]);
-    setChatInput('');
+    setChatMessages((prev) => [...prev, { sender: 'user', text: question }]); setChatInput('');
     try {
       const res = await fetchApi<any>('/tutor/chat', { method: 'POST', body: JSON.stringify({ courseId: activeCourse.id, question }) });
       setChatMessages((prev) => [...prev, { sender: 'tutor', text: res.answer, citations: res.citations }]);
-    } catch (err: any) {
-      setChatMessages((prev) => [...prev, { sender: 'tutor', text: `Unable to answer: ${err.message}` }]);
-    }
+    } catch (err: any) { setChatMessages((prev) => [...prev, { sender: 'tutor', text: `Unable to answer: ${err.message}` }]); }
   };
 
   const handleQuizSubmit = () => {
@@ -154,14 +145,14 @@ export default function NuraApp() {
     <Navbar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} setSelectedWorkspaceId={setSelectedWorkspaceId} dailyStreakDays={dashboardStats.dailyStreakDays} user={user} onSignOut={() => { removeStoredToken(); setUser(null); setWorkspaces([]); setCourses([]); setActiveCourse(null); }} onOpenAuth={() => setShowAuthModal(true)} activeTab={activeTab} setActiveTab={setActiveTab} />
     <main className={styles.contentMain}>
       {activeTab === 'dashboard' && <><div className="animate-fade-up"><HeroQASearch activeCourse={activeCourse} onGoToTutor={() => setActiveTab('tutor')} /></div><div className="animate-fade-up delay-100"><FeatureStories onGoToIngestion={() => setActiveTab('ingestion')} onGoToTutor={() => setActiveTab('tutor')} onGoToQuizzes={() => setActiveTab('quizzes')} /></div><div className="animate-fade-up delay-200"><BigStatement /></div><div className="animate-fade-up delay-300"><DashboardTab stats={dashboardStats} courses={courses} onSelectCourse={(c) => { setActiveCourse(c); setSelectedLesson(c.modules?.[0]?.lessons?.[0] || null); setActiveTab('reader'); }} onNewCourse={() => setActiveTab('ingestion')} /></div></>}
-      {activeTab === 'ingestion' && <div className="animate-fade-up"><IngestionTab ingestUrl={ingestUrl} setIngestUrl={setIngestUrl} ingestFilename={ingestFilename} setIngestFilename={setIngestFilename} isProcessing={isProcessing} processingStep={processingStep} onTrigger={handleTriggerIngestion} /></div>}
+      {activeTab === 'ingestion' && <div className="animate-fade-up"><IngestionTab ingestUrl={ingestUrl} setIngestUrl={setIngestUrl} ingestFilename={ingestFilename} setIngestFilename={setIngestFilename} isProcessing={isProcessing} processingStep={processingStep} onFileSelect={handleFileSelect} onTrigger={handleTriggerIngestion} /></div>}
       {activeTab === 'reader' && <div className="animate-fade-up"><ReaderTab activeCourse={activeCourse} selectedLesson={selectedLesson} setSelectedLesson={setSelectedLesson} onGoToQuizzes={() => setActiveTab('quizzes')} /></div>}
       {activeTab === 'tutor' && <div className="animate-fade-up"><TutorTab activeCourse={activeCourse} chatMessages={chatMessages} chatInput={chatInput} setChatInput={setChatInput} onSendMessage={handleSendMessage} /></div>}
       {activeTab === 'quizzes' && <div className="animate-fade-up"><AssessmentTab selectedLesson={selectedLesson} userAnswers={userAnswers} setUserAnswers={setUserAnswers} quizResult={quizResult} onSubmitQuiz={handleQuizSubmit} currentFcIndex={currentFcIndex} setCurrentFcIndex={setCurrentFcIndex} isFlipped={isFlipped} setIsFlipped={setIsFlipped} /></div>}
       {activeTab === 'analytics' && <div className="animate-fade-up"><AnalyticsTab stats={dashboardStats} /></div>}
     </main>
     <Footer />
-    <AuthModal show={showAuthModal} onClose={() => setShowAuthModal(false)} authMode={authMode} setAuthMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} name={name} setName={setName} authError={authError} onSubmit={handleAuthSubmit} />
+    <AuthModal show={showAuthModal} onClose={() => setShowAuthModal(false)} authMode={authMode} setAuthMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={password} name={name} setName={setName} authError={authError} onSubmit={handleAuthSubmit} />
     <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} setActiveTab={setActiveTab} />
   </div>;
 }
