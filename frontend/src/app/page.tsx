@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import styles from './page.module.css';
 import { fetchApi, setStoredToken, getStoredToken, removeStoredToken } from '../lib/api';
 import { CredBanner } from '../components/CredBanner';
@@ -19,122 +19,63 @@ import { Footer } from '../components/Footer';
 import { CommandPalette } from '../components/CommandPalette';
 
 export default function NuraApp() {
-  // Navigation & User State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'ingestion' | 'reader' | 'tutor' | 'quizzes' | 'analytics'>('dashboard');
-  const [user, setUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-
-  // Auth Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [authError, setAuthError] = useState('');
-
-  // Workspaces & Courses Data State
-  const [workspaces, setWorkspaces] = useState<any[]>([
-    { id: 'default-ws-1', name: 'Default Learning Sandbox' },
-  ]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('default-ws-1');
+  const [workspaces, setWorkspaces] = useState<any[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
   const [courses, setCourses] = useState<any[]>([]);
   const [activeCourse, setActiveCourse] = useState<any>(null);
   const [selectedLesson, setSelectedLesson] = useState<any>(null);
-
-  // Ingestion Form State
   const [ingestUrl, setIngestUrl] = useState('');
   const [ingestFilename, setIngestFilename] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
-
-  // Chat State
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<any[]>([]);
-
-  // Quiz State
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [quizResult, setQuizResult] = useState<any>(null);
-
-  // Flashcard State
   const [currentFcIndex, setCurrentFcIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [dashboardStats, setDashboardStats] = useState<any>({ dailyStreakDays: 0, totalStudyMinutes: 0, completedLessons: 0, totalAssignedLessons: 0, completionRate: 0, weakAreas: [], weeklyActivity: [] });
 
-  // Analytics State
-  const [dashboardStats, setDashboardStats] = useState<any>({
-    dailyStreakDays: 5,
-    totalStudyMinutes: 165,
-    completedLessons: 4,
-    totalAssignedLessons: 6,
-    completionRate: 67,
-    weakAreas: [
-      { lessonTitle: 'Vector Indexing & Filtering', courseTitle: 'Applied RAG Systems', score: 60 },
-    ],
-  });
+  const loadData = async (workspaceId?: string) => {
+    const ws = await fetchApi<any[]>('/workspace');
+    setWorkspaces(ws);
+    const id = workspaceId || selectedWorkspaceId || ws[0]?.id;
+    if (!id) return;
+    if (id !== selectedWorkspaceId) setSelectedWorkspaceId(id);
+    const [courseData, stats] = await Promise.all([
+      fetchApi<any[]>(`/course?workspaceId=${encodeURIComponent(id)}`),
+      fetchApi<any>('/analytics/dashboard'),
+    ]);
+    setCourses(courseData);
+    setDashboardStats(stats);
+    const course = courseData[0] || null;
+    setActiveCourse(course);
+    setSelectedLesson(course?.modules?.[0]?.lessons?.[0] || null);
+  };
 
-  // Initial Load & Auth Sync
   useEffect(() => {
-    const token = getStoredToken();
-    if (token) {
-      setUser({ id: 'demo-user-1', name: 'Student Developer', email: 'student@nura.ai' });
+    if (getStoredToken()) {
+      loadData().catch(() => { removeStoredToken(); setUser(null); });
     }
-    loadMockCourses();
-
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        setShowCommandPalette((prev) => !prev);
-      }
+    const keyHandler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setShowCommandPalette((v) => !v); }
     };
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    window.addEventListener('keydown', keyHandler);
+    return () => window.removeEventListener('keydown', keyHandler);
   }, []);
 
-  const loadMockCourses = () => {
-    const defaultCourse = {
-      id: 'course-sample-1',
-      title: 'Applied RAG & System Design',
-      description: 'Master modular monoliths, vector embeddings, Qdrant indexes, and LLM prompt engineering.',
-      difficulty: 'Intermediate',
-      modules: [
-        {
-          id: 'mod-1',
-          title: 'Module 1: Modular Monolith Architecture',
-          order: 1,
-          lessons: [
-            {
-              id: 'les-1',
-              title: '1.1 Monolith to Microservices Transition',
-              estimatedTime: 15,
-              markdown: '# 1.1 Monolith to Microservices Transition\n\nStarting with a clean modular monolith is recommended.\n\n1. Single Deployment Artifact\n2. In-process Typesafe Calls\n3. Decoupled Modules',
-              flashcards: [
-                { front: 'Why start with a modular monolith?', back: 'To eliminate network latency overhead while maintaining strict domain boundary isolation.' },
-                { front: 'What handles background jobs in NURA?', back: 'BullMQ queues backed by Redis.' },
-              ],
-              quizzes: [
-                {
-                  id: 'q-1',
-                  questions: [
-                    {
-                      id: 'q-ans-1',
-                      question: 'Which architecture is recommended for initial NURA MVP deployment?',
-                      options: ['Microservices on K8s', 'Modular Monolith on AWS ECS', 'Serverless Lambdas', 'Monolithic PHP'],
-                      answer: 'Modular Monolith on AWS ECS',
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    };
-
-    setCourses([defaultCourse]);
-    setActiveCourse(defaultCourse);
-    if (defaultCourse.modules[0]?.lessons[0]) {
-      setSelectedLesson(defaultCourse.modules[0].lessons[0]);
-    }
-  };
+  useEffect(() => {
+    if (selectedWorkspaceId && getStoredToken()) loadData(selectedWorkspaceId).catch(() => undefined);
+  }, [selectedWorkspaceId]);
 
   const handleAutoFillAuth = () => {
     setEmail('student@nura.ai');
@@ -143,295 +84,84 @@ export default function NuraApp() {
     setShowAuthModal(true);
   };
 
-  // Auth Handlers
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     try {
       if (authMode === 'register') {
-        const res = (await fetchApi('/auth/register', {
-          method: 'POST',
-          body: JSON.stringify({ email, password, name }),
-        })) as any;
-        setUser(res);
-      } else {
-        const res = (await fetchApi('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ email, password }),
-        })) as any;
-        setStoredToken(res.accessToken);
-        setUser(res.user);
+        await fetchApi('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
       }
+      const res = await fetchApi<any>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      setStoredToken(res.accessToken);
+      setUser(res.user);
       setShowAuthModal(false);
+      await loadData();
     } catch (err: any) {
-      setStoredToken('mock-jwt-token-12345');
-      setUser({ id: 'demo-user-1', name: name || 'Student Developer', email });
-      setShowAuthModal(false);
+      setAuthError(err.message || 'Authentication failed.');
     }
   };
 
-  // Ingestion Handler
   const handleTriggerIngestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ingestUrl && !ingestFilename) return;
-
+    if (!selectedWorkspaceId || (!ingestUrl && !ingestFilename)) return;
     setIsProcessing(true);
     setProcessingStep(1);
-
-    setTimeout(() => setProcessingStep(2), 1000);
-    setTimeout(() => setProcessingStep(3), 2000);
-    setTimeout(async () => {
+    try {
+      setProcessingStep(2);
+      const course = await fetchApi<any>('/course/generate-from-ingestion', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId: selectedWorkspaceId, url: ingestUrl || undefined, filename: ingestFilename || undefined }),
+      });
+      setCourses((prev) => [course, ...prev]);
+      setActiveCourse(course);
+      setSelectedLesson(course.modules?.[0]?.lessons?.[0] || null);
       setProcessingStep(4);
-      try {
-        const newCourse = (await fetchApi('/course/generate-from-ingestion', {
-          method: 'POST',
-          body: JSON.stringify({
-            workspaceId: selectedWorkspaceId,
-            url: ingestUrl,
-            filename: ingestFilename,
-          }),
-        })) as any;
-        setCourses((prev) => [newCourse, ...prev]);
-        setActiveCourse(newCourse);
-      } catch (err) {
-        const generatedCourse = {
-          id: 'course-generated-' + Date.now(),
-          title: ingestUrl.includes('github') ? 'GitHub Codebase Syllabus' : ingestFilename || 'AI Course Syllabus',
-          description: 'AI-generated curriculum with chunked RAG vector indexes and flashcards.',
-          difficulty: 'Intermediate',
-          modules: [
-            {
-              id: 'mod-gen-1',
-              title: 'Module 1: Ingested Knowledge Concepts',
-              order: 1,
-              lessons: [
-                {
-                  id: 'les-gen-1',
-                  title: '1.1 System Architecture Overview',
-                  estimatedTime: 20,
-                  markdown: '# 1.1 System Architecture Overview\n\nIngested source content parsed and chunked into 1536d vectors.\n\n- Vector Database: Qdrant\n- Queue: BullMQ\n- Cache: Redis',
-                  flashcards: [
-                    { front: 'How does Qdrant index vectors?', back: 'Using HNSW graphs with cosine distance.' },
-                  ],
-                  quizzes: [
-                    {
-                      id: 'q-gen-1',
-                      questions: [
-                        {
-                          id: 'q-ans-gen-1',
-                          question: 'Which component indexes vector embeddings?',
-                          options: ['PostgreSQL', 'Qdrant Vector DB', 'Redis', 'S3'],
-                          answer: 'Qdrant Vector DB',
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        };
-        setCourses((prev) => [generatedCourse, ...prev]);
-        setActiveCourse(generatedCourse);
-      }
-      setIsProcessing(false);
+      setIngestUrl('');
+      setIngestFilename('');
       setActiveTab('reader');
-    }, 3000);
+    } catch (err: any) {
+      setAuthError(err.message || 'Ingestion failed.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  // Chat Handler
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || !activeCourse) return;
-
-    const userMsg = { sender: 'user', text: chatInput };
-    setChatMessages((prev) => [...prev, userMsg]);
-    const currentQ = chatInput;
+    const question = chatInput.trim();
+    setChatMessages((prev) => [...prev, { sender: 'user', text: question }]);
     setChatInput('');
-
     try {
-      const res = (await fetchApi('/tutor/chat', {
-        method: 'POST',
-        body: JSON.stringify({ courseId: activeCourse.id, question: currentQ }),
-      })) as any;
-      setChatMessages((prev) => [
-        ...prev,
-        { sender: 'tutor', text: res.answer, citations: res.citations },
-      ]);
-    } catch (err) {
-      setTimeout(() => {
-        const courseTitle = activeCourse ? activeCourse.title : 'Course';
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            sender: 'tutor',
-            text: 'Based on your materials for "' + courseTitle + '": RAG pipelines index chunks into Qdrant vector store and retrieve them using cosine similarity.',
-            citations: [
-              { chunkIndex: 1, snippet: 'Vector embeddings generated with 1536 dimensions...', relevanceScore: '96%' },
-            ],
-          },
-        ]);
-      }, 600);
+      const res = await fetchApi<any>('/tutor/chat', { method: 'POST', body: JSON.stringify({ courseId: activeCourse.id, question }) });
+      setChatMessages((prev) => [...prev, { sender: 'tutor', text: res.answer, citations: res.citations }]);
+    } catch (err: any) {
+      setChatMessages((prev) => [...prev, { sender: 'tutor', text: `Unable to answer: ${err.message}` }]);
     }
   };
 
-  // Quiz Submit Handler
   const handleQuizSubmit = () => {
-    if (!selectedLesson?.quizzes[0]) return;
-    const quiz = selectedLesson.quizzes[0];
-    let correct = 0;
-
-    quiz.questions.forEach((q: any) => {
-      if ((userAnswers[q.id] || '').trim().toLowerCase() === q.answer.trim().toLowerCase()) {
-        correct++;
-      }
-    });
-
+    const quiz = selectedLesson?.quizzes?.[0];
+    if (!quiz?.questions?.length) return;
+    const correct = quiz.questions.filter((q: any) => (userAnswers[q.id] || '').trim().toLowerCase() === q.answer.trim().toLowerCase()).length;
     const percentage = Math.round((correct / quiz.questions.length) * 100);
-    setQuizResult({
-      score: correct,
-      total: quiz.questions.length,
-      percentage,
-      passed: percentage >= 70,
-    });
+    setQuizResult({ score: correct, total: quiz.questions.length, percentage, passed: percentage >= 70 });
   };
 
-  return (
-    <div className={styles.appContainer}>
-      <div className={styles.ambientBackground}>
-        <div className={styles.noiseOverlay} />
-      </div>
-      
-      <CredBanner onAutoFill={handleAutoFillAuth} />
-
-      <Navbar
-        workspaces={workspaces}
-        selectedWorkspaceId={selectedWorkspaceId}
-        setSelectedWorkspaceId={setSelectedWorkspaceId}
-        dailyStreakDays={dashboardStats.dailyStreakDays}
-        user={user}
-        onSignOut={() => {
-          removeStoredToken();
-          setUser(null);
-        }}
-        onOpenAuth={() => setShowAuthModal(true)}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-      />
-
-      <main className={styles.contentMain}>
-        {activeTab === 'dashboard' && (
-          <div>
-            <div className="animate-fade-up">
-              <HeroQASearch activeCourse={activeCourse} onGoToTutor={() => setActiveTab('tutor')} />
-            </div>
-            <div className="animate-fade-up delay-100">
-              <FeatureStories
-                onGoToIngestion={() => setActiveTab('ingestion')}
-                onGoToTutor={() => setActiveTab('tutor')}
-                onGoToQuizzes={() => setActiveTab('quizzes')}
-              />
-            </div>
-            <div className="animate-fade-up delay-200">
-              <BigStatement />
-            </div>
-            <div className="animate-fade-up delay-300">
-              <DashboardTab
-                stats={dashboardStats}
-                courses={courses}
-                onSelectCourse={(c) => {
-                  setActiveCourse(c);
-                  if (c.modules[0]?.lessons[0]) setSelectedLesson(c.modules[0].lessons[0]);
-                  setActiveTab('reader');
-                }}
-                onNewCourse={() => setActiveTab('ingestion')}
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'ingestion' && (
-          <div className="animate-fade-up">
-            <IngestionTab
-              ingestUrl={ingestUrl}
-              setIngestUrl={setIngestUrl}
-              ingestFilename={ingestFilename}
-              setIngestFilename={setIngestFilename}
-              isProcessing={isProcessing}
-              processingStep={processingStep}
-              onTrigger={handleTriggerIngestion}
-            />
-          </div>
-        )}
-
-        {activeTab === 'reader' && (
-          <div className="animate-fade-up">
-            <ReaderTab
-              activeCourse={activeCourse}
-              selectedLesson={selectedLesson}
-              setSelectedLesson={setSelectedLesson}
-              onGoToQuizzes={() => setActiveTab('quizzes')}
-            />
-          </div>
-        )}
-
-        {activeTab === 'tutor' && (
-          <div className="animate-fade-up">
-            <TutorTab
-              activeCourse={activeCourse}
-              chatMessages={chatMessages}
-              chatInput={chatInput}
-              setChatInput={setChatInput}
-              onSendMessage={handleSendMessage}
-            />
-          </div>
-        )}
-
-        {activeTab === 'quizzes' && (
-          <div className="animate-fade-up">
-            <AssessmentTab
-              selectedLesson={selectedLesson}
-              userAnswers={userAnswers}
-              setUserAnswers={setUserAnswers}
-              quizResult={quizResult}
-              onSubmitQuiz={handleQuizSubmit}
-              currentFcIndex={currentFcIndex}
-              setCurrentFcIndex={setCurrentFcIndex}
-              isFlipped={isFlipped}
-              setIsFlipped={setIsFlipped}
-            />
-          </div>
-        )}
-
-        {activeTab === 'analytics' && (
-          <div className="animate-fade-up">
-            <AnalyticsTab stats={dashboardStats} />
-          </div>
-        )}
-      </main>
-
-      <Footer />
-
-      <AuthModal
-        show={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        authMode={authMode}
-        setAuthMode={setAuthMode}
-        email={email}
-        setEmail={setEmail}
-        password={password}
-        setPassword={setPassword}
-        name={name}
-        setName={setName}
-        authError={authError}
-        onSubmit={handleAuthSubmit}
-      />
-
-      <CommandPalette 
-        isOpen={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
-        setActiveTab={setActiveTab}
-      />
-    </div>
-  );
+  return <div className={styles.appContainer}>
+    <div className={styles.ambientBackground}><div className={styles.noiseOverlay} /></div>
+    <CredBanner onAutoFill={handleAutoFillAuth} />
+    <Navbar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} setSelectedWorkspaceId={setSelectedWorkspaceId} dailyStreakDays={dashboardStats.dailyStreakDays} user={user} onSignOut={() => { removeStoredToken(); setUser(null); setWorkspaces([]); setCourses([]); setActiveCourse(null); }} onOpenAuth={() => setShowAuthModal(true)} activeTab={activeTab} setActiveTab={setActiveTab} />
+    <main className={styles.contentMain}>
+      {activeTab === 'dashboard' && <><div className="animate-fade-up"><HeroQASearch activeCourse={activeCourse} onGoToTutor={() => setActiveTab('tutor')} /></div><div className="animate-fade-up delay-100"><FeatureStories onGoToIngestion={() => setActiveTab('ingestion')} onGoToTutor={() => setActiveTab('tutor')} onGoToQuizzes={() => setActiveTab('quizzes')} /></div><div className="animate-fade-up delay-200"><BigStatement /></div><div className="animate-fade-up delay-300"><DashboardTab stats={dashboardStats} courses={courses} onSelectCourse={(c) => { setActiveCourse(c); setSelectedLesson(c.modules?.[0]?.lessons?.[0] || null); setActiveTab('reader'); }} onNewCourse={() => setActiveTab('ingestion')} /></div></>}
+      {activeTab === 'ingestion' && <div className="animate-fade-up"><IngestionTab ingestUrl={ingestUrl} setIngestUrl={setIngestUrl} ingestFilename={ingestFilename} setIngestFilename={setIngestFilename} isProcessing={isProcessing} processingStep={processingStep} onTrigger={handleTriggerIngestion} /></div>}
+      {activeTab === 'reader' && <div className="animate-fade-up"><ReaderTab activeCourse={activeCourse} selectedLesson={selectedLesson} setSelectedLesson={setSelectedLesson} onGoToQuizzes={() => setActiveTab('quizzes')} /></div>}
+      {activeTab === 'tutor' && <div className="animate-fade-up"><TutorTab activeCourse={activeCourse} chatMessages={chatMessages} chatInput={chatInput} setChatInput={setChatInput} onSendMessage={handleSendMessage} /></div>}
+      {activeTab === 'quizzes' && <div className="animate-fade-up"><AssessmentTab selectedLesson={selectedLesson} userAnswers={userAnswers} setUserAnswers={setUserAnswers} quizResult={quizResult} onSubmitQuiz={handleQuizSubmit} currentFcIndex={currentFcIndex} setCurrentFcIndex={setCurrentFcIndex} isFlipped={isFlipped} setIsFlipped={setIsFlipped} /></div>}
+      {activeTab === 'analytics' && <div className="animate-fade-up"><AnalyticsTab stats={dashboardStats} /></div>}
+    </main>
+    <Footer />
+    <AuthModal show={showAuthModal} onClose={() => setShowAuthModal(false)} authMode={authMode} setAuthMode={setAuthMode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} name={name} setName={setName} authError={authError} onSubmit={handleAuthSubmit} />
+    <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} setActiveTab={setActiveTab} />
+  </div>;
 }
