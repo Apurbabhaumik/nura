@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ParserService } from '../parser/parser.service';
 import { AiService } from '../ai/ai.service';
@@ -12,7 +12,25 @@ export class CourseService {
     private readonly ai: AiService,
   ) {}
 
-  async createManual(dto: CreateCourseDto) {
+  private async assertWorkspaceOwner(userId: string, workspaceId: string) {
+    const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    if (!workspace) throw new NotFoundException('Workspace not found.');
+    if (workspace.ownerId !== userId) throw new ForbiddenException('You do not have access to this workspace.');
+    return workspace;
+  }
+
+  private async assertCourseOwner(userId: string, courseId: string) {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      include: { workspace: true },
+    });
+    if (!course) throw new NotFoundException('Course not found.');
+    if (course.workspace.ownerId !== userId) throw new ForbiddenException('You do not have access to this course.');
+    return course;
+  }
+
+  async createManual(userId: string, dto: CreateCourseDto) {
+    await this.assertWorkspaceOwner(userId, dto.workspaceId);
     return this.prisma.course.create({
       data: {
         workspaceId: dto.workspaceId,
@@ -24,7 +42,9 @@ export class CourseService {
     });
   }
 
-  async generateFromIngestion(dto: GenerateFromIngestionDto) {
+  async generateFromIngestion(userId: string, dto: GenerateFromIngestionDto) {
+    await this.assertWorkspaceOwner(userId, dto.workspaceId);
+
     let parsedText = '';
     let titleHint = dto.filename || 'Ingested Learning Course';
 
@@ -38,21 +58,19 @@ export class CourseService {
         parsedText = parsed.text;
         titleHint = parsed.title;
       } else {
-        const parsed = await this.parser.parseFile('Web Document', 'txt');
-        parsedText = parsed.text;
+        throw new ForbiddenException('Only GitHub and YouTube URLs are supported.');
       }
-    } else if (dto.filename) {
-      const parsed = await this.parser.parseFile(dto.filename, 'pdf', dto.fileContent ? Buffer.from(dto.fileContent) : undefined);
+    } else if (dto.fileContent) {
+      const parsed = await this.parser.parseFile(dto.filename || 'document.txt', 'text/plain', Buffer.from(dto.fileContent, 'base64'));
       parsedText = parsed.text;
       titleHint = parsed.title;
     } else {
-      parsedText = 'Standard software engineering, software architecture, and artificial intelligence syllabus.';
+      throw new ForbiddenException('Provide a GitHub/YouTube URL or file content.');
     }
 
-    // AI Course Scaffold Generation
-    const generated = await this.ai.generateCourseStructure(parsedText, titleHint);
+    if (!parsedText.trim()) throw new ForbiddenException('No readable content was found in the source.');
 
-    // Save Course to Database
+    const generated = await this.ai.generateCourseStructure(parsedText, titleHint);
     const course = await this.prisma.course.create({
       data: {
         workspaceId: dto.workspaceId,
@@ -62,123 +80,89 @@ export class CourseService {
       },
     });
 
-    // Save Upload record
-    await this.prisma.upload.create({
-      data: {
-        courseId: course.id,
-        filename: dto.filename || dto.url || 'Ingested Document',
-        type: dto.url ? 'URL' : 'FILE',
-        status: 'COMPLETED',
-      },
-    });
-
-    // Index chunks in vector store
-    await this.ai.indexCourseChunks(course.id, parsedText, course.title);
-
-    // Save Modules, Lessons, Quizzes & Flashcards
-    for (const mod of generated.modules) {
-      const createdMod = await this.prisma.module.create({
+    try {
+      await this.prisma.upload.create({
         data: {
           courseId: course.id,
-          title: mod.title,
-          order: mod.order,
+          filename: dto.filename || dto.url || 'Ingested Document',
+          type: dto.url ? 'URL' : 'FILE',
+          status: 'COMPLETED',
         },
       });
 
-      for (const les of mod.lessons) {
-        const createdLesson = await this.prisma.lesson.create({
-          data: {
-            moduleId: createdMod.id,
-            title: les.title,
-            markdown: les.markdown,
-            estimatedTime: les.estimatedTime,
-          },
+      await this.ai.indexCourseChunks(course.id, parsedText, course.title);
+
+      for (const mod of generated.modules) {
+        const createdMod = await this.prisma.module.create({
+          data: { courseId: course.id, title: mod.title, order: mod.order },
         });
-
-        // Flashcards
-        for (const fc of les.flashcards) {
-          await this.prisma.flashcard.create({
+        for (const les of mod.lessons) {
+          const createdLesson = await this.prisma.lesson.create({
             data: {
-              lessonId: createdLesson.id,
-              front: fc.front,
-              back: fc.back,
+              moduleId: createdMod.id,
+              title: les.title,
+              markdown: les.markdown,
+              estimatedTime: les.estimatedTime,
             },
           });
-        }
-
-        // Quiz
-        if (les.quiz) {
-          const createdQuiz = await this.prisma.quiz.create({
-            data: {
-              lessonId: createdLesson.id,
-              difficulty: les.quiz.difficulty,
-              timeLimit: les.quiz.timeLimit,
-            },
-          });
-
-          for (const q of les.quiz.questions) {
-            await this.prisma.question.create({
-              data: {
-                quizId: createdQuiz.id,
-                question: q.question,
-                answer: q.answer,
-                options: JSON.stringify(q.options),
-                type: q.type,
-              },
+          if (les.flashcards?.length) {
+            await this.prisma.flashcard.createMany({
+              data: les.flashcards.map((fc) => ({ lessonId: createdLesson.id, front: fc.front, back: fc.back })),
             });
+          }
+          if (les.quiz) {
+            const createdQuiz = await this.prisma.quiz.create({
+              data: { lessonId: createdLesson.id, difficulty: les.quiz.difficulty, timeLimit: les.quiz.timeLimit },
+            });
+            if (les.quiz.questions?.length) {
+              await this.prisma.question.createMany({
+                data: les.quiz.questions.map((q) => ({
+                  quizId: createdQuiz.id,
+                  question: q.question,
+                  answer: q.answer,
+                  options: JSON.stringify(q.options),
+                  type: q.type,
+                })),
+              });
+            }
           }
         }
       }
+    } catch (error) {
+      await this.prisma.course.delete({ where: { id: course.id } }).catch(() => undefined);
+      throw error;
     }
 
-    return this.findOne(course.id);
+    return this.findOne(userId, course.id);
   }
 
-  async findAllByWorkspace(workspaceId: string) {
+  async findAllByWorkspace(userId: string, workspaceId: string) {
+    await this.assertWorkspaceOwner(userId, workspaceId);
     return this.prisma.course.findMany({
       where: { workspaceId },
-      include: {
-        modules: {
-          include: {
-            lessons: true,
-          },
-        },
-        _count: {
-          select: { uploads: true, chats: true },
-        },
-      },
+      include: { modules: { include: { lessons: true } }, _count: { select: { uploads: true, chats: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async findOne(id: string) {
+  async findOne(userId: string, id: string) {
+    await this.assertCourseOwner(userId, id);
     const course = await this.prisma.course.findUnique({
       where: { id },
       include: {
         modules: {
           orderBy: { order: 'asc' },
-          include: {
-            lessons: {
-              include: {
-                quizzes: {
-                  include: { questions: true },
-                },
-                flashcards: true,
-                progress: true,
-              },
-            },
-          },
+          include: { lessons: { include: { quizzes: { include: { questions: true } }, flashcards: true, progress: true } } },
         },
         uploads: true,
       },
     });
-
     if (!course) throw new NotFoundException('Course not found.');
     return course;
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(userId: string, id: string) {
+    await this.assertCourseOwner(userId, id);
     await this.prisma.course.delete({ where: { id } });
     return { success: true };
   }
