@@ -1,37 +1,35 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: teachstack-postgres
-    restart: always
+    container_name: nura-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: teachstack_user
+      POSTGRES_USER: nura_user
       POSTGRES_PASSWORD: secure_dev_password
-      POSTGRES_DB: teachstack_db
+      POSTGRES_DB: nura_db
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U teachstack_user -d teachstack_db"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U nura_user -d nura_db"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: teachstack-redis
-    restart: always
+    container_name: nura-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redisdata:/data
 
   qdrant:
-    image: qdrant/qdrant:latest
-    container_name: teachstack-qdrant
-    restart: always
+    image: qdrant/qdrant:v1.12.5
+    container_name: nura-qdrant
+    restart: unless-stopped
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -42,14 +40,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: teachstack-backend
-    restart: always
+    container_name: nura-backend
+    restart: unless-stopped
     environment:
-      DATABASE_URL: "postgresql://teachstack_user:secure_dev_password@postgres:5432/teachstack_db?schema=public"
-      JWT_SECRET: "teachstack-prod-jwt-secret-889900"
+      DATABASE_URL: "postgresql://nura_user:secure_dev_password@postgres:5432/nura_db?schema=public"
+      JWT_SECRET: "change-this-development-secret"
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"
       QDRANT_URL: "http://qdrant:6333"
+      PORT: "3000"
     ports:
       - "3000:3000"
     depends_on:
@@ -64,12 +63,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    container_name: teachstack-frontend
-    restart: always
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:3000/api"
+    container_name: nura-frontend
+    restart: unless-stopped
     ports:
       - "3001:3000"
     environment:
-      NEXT_PUBLIC_API_URL: "http://backend:3000/api"
+      NEXT_PUBLIC_API_URL: "http://localhost:3000/api"
     depends_on:
       - backend
 
