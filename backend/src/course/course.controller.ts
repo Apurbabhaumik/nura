@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, Query, Delete, UseGuards, ParseUUID
 import { CourseService } from './course.service';
 import { CreateCourseDto, GenerateFromIngestionDto } from './dto/create-course.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @Controller('course')
 @UseGuards(JwtAuthGuard)
@@ -9,27 +10,27 @@ export class CourseController {
   constructor(private readonly courseService: CourseService) {}
 
   @Post()
-  async createManual(@Body() dto: CreateCourseDto) {
-    return this.courseService.createManual(dto);
+  createManual(@GetUser('id') userId: string, @Body() dto: CreateCourseDto) {
+    return this.courseService.createManual(userId, dto);
   }
 
   @Post('generate-from-ingestion')
-  async generateFromIngestion(@Body() dto: GenerateFromIngestionDto) {
-    return this.courseService.generateFromIngestion(dto);
+  generateFromIngestion(@GetUser('id') userId: string, @Body() dto: GenerateFromIngestionDto) {
+    return this.courseService.generateFromIngestion(userId, dto);
   }
 
   @Get()
-  async findAllByWorkspace(@Query('workspaceId') workspaceId: string) {
-    return this.courseService.findAllByWorkspace(workspaceId);
+  findAllByWorkspace(@GetUser('id') userId: string, @Query('workspaceId') workspaceId: string) {
+    return this.courseService.findAllByWorkspace(userId, workspaceId);
   }
 
   @Get(':id')
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.courseService.findOne(id);
+  findOne(@GetUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.courseService.findOne(userId, id);
   }
 
   @Delete(':id')
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.courseService.remove(id);
+  remove(@GetUser('id') userId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.courseService.remove(userId, id);
   }
 }
