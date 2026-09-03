@@ -1,107 +1,165 @@
 <div align="center">
 
 # N U R A
-**Stop Memorizing. Start Compiling.**
+### Stop Memorizing. Start Compiling.
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=next.js)](https://nextjs.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-FF5252?style=for-the-badge&logo=database)](https://qdrant.tech/)
-[![AWS](https://img.shields.io/badge/AWS-ECS_|_S3-232F3E?style=for-the-badge&logo=amazon-aws)](https://aws.amazon.com/)
-[![CI/CD](https://img.shields.io/badge/Jenkins-Automated-D24939?style=for-the-badge&logo=jenkins&logoColor=white)]()
-
-An elite, locally-powered AI learning engine designed to transform how students acquire and retain deep technical knowledge. Built with a monochromatic brutalist design philosophy inspired by world-class engineering tools.
+AI-powered personal learning and knowledge workspace.
 
 </div>
 
 ---
 
-## ⚡ The Philosophy
+## What is NURA?
 
-Traditional learning platforms treat students as passive readers. NURA treats the human brain like a compiler. It requires active verification of concepts through **Active Recall**, **Spaced Repetition**, and **Knowledge Graphs**. 
+NURA turns a learner's technical knowledge sources into a structured workspace for studying, asking grounded questions, taking assessments, and tracking progress.
 
-By leveraging local AI inference running directly in the browser, NURA provides a $100M SaaS-level experience that remains **completely free** for students, bypassing massive cloud API costs.
+The product is designed around three principles:
 
-## 🚀 Core Features
+- **Grounded learning** — answers should be tied to the user's learning material rather than generic chat.
+- **Active recall** — assessments and flashcards reinforce retrieval instead of passive reading.
+- **Measurable progress** — study activity and lesson completion are persisted and exposed through analytics.
 
-- **Automated Curriculum Ingestion (RAG):** Input a GitHub repo URL or upload a PDF. NURA parses, chunks, and vectorizes the content to generate a complete syllabus.
-- **Visual Knowledge Graphs:** Track your mastery visually. Nodes turn stark white upon mastery and dark grey when weak, requiring review.
-- **Active Recall Engine:** Integrated Cloze Deletions (fill-in-the-blank) and dynamically generated Flashcards force memory retrieval.
-- **Local AI Tutor:** A chat interface grounded in your ingested material with exact citations. Runs locally for zero latency and zero cost.
-- **Adaptive Difficulty (ELI5):** Seamlessly toggle the complexity of technical reading material for immediate conceptual understanding.
-- **P2P Community Hub:** Download pre-indexed 1536d vector spaces (e.g., "MIT 6.006", "React 19 Docs") shared by peers.
-- **Godmode Command Palette:** Hit `Ctrl + K` (or `Cmd + K`) anywhere to instantly summon a power-user overlay for frictionless navigation without touching your mouse.
+## Current architecture
 
-## 🏗️ Architecture & Tech Stack
+| Layer | Technology |
+| --- | --- |
+| Web application | Next.js 14 + React + TypeScript |
+| API | NestJS + TypeScript |
+| Authentication | JWT + Passport + bcrypt |
+| Database | PostgreSQL + Prisma |
+| Rate limiting | NestJS Throttler |
+| Vector infrastructure | Qdrant (provisioned locally; application integration in progress) |
+| Async infrastructure | Redis (provisioned locally; queue workers in progress) |
+| Containers | Docker + Docker Compose |
+| CI | GitHub Actions |
 
-NURA is engineered for extreme performance, utilizing a modern, decoupled architecture.
+## Production-minded foundations
 
-### Frontend (Client Engine)
-- **Framework:** Next.js 14 (React)
-- **Design System:** Pure Vanilla CSS (Monochromatic Brutalism, custom spring-physics animations).
-- **Local Inference:** `Transformers.js` / `WebLLM` for in-browser AI processing.
+NURA includes several foundations expected in a serious application:
 
-### Backend (RAG Pipeline)
-- **Framework:** NestJS (TypeScript Modular Monolith).
-- **Queue System:** BullMQ & Redis for heavy asynchronous ingestion tasks.
+- DTO validation with whitelisting and rejected unknown fields.
+- JWT-protected API routes and ownership checks around user workspaces and courses.
+- PostgreSQL persistence through Prisma.
+- Global API rate limiting.
+- Request IDs for tracing individual HTTP requests.
+- Restrictive CORS configuration driven by environment variables.
+- Baseline HTTP security headers.
+- Liveness (`/api/health`) and dependency readiness (`/api/ready`) endpoints.
+- Graceful application shutdown hooks.
+- Docker health checks and dependency-aware service startup.
+- Separate frontend build-time API configuration.
+- Global frontend error and loading states.
+- Dependency audits and Docker builds in CI.
+- Environment templates instead of committing application secrets.
 
-### Data & Infrastructure
-- **Databases:** PostgreSQL (Relational Data), Qdrant (Vector Embeddings).
-- **Cloud:** AWS ECS (Container Compute), AWS S3 (Blob Storage).
-- **Observability:** Prometheus for aggressive telemetry scraping and performance monitoring.
-- **CI/CD:** Jenkins pipelines for automated testing, building, and zero-downtime deployments.
+## Product areas
 
----
+The application currently contains the foundations for:
 
-## 🛠️ Getting Started (Local Development)
+- Authentication and registration
+- Personal workspaces
+- Course creation and management
+- Document/source ingestion UI
+- AI tutor interface
+- Lessons and reader experience
+- Quizzes and flashcards
+- Progress tracking
+- Analytics
 
-Follow these steps to spin up the NURA engine locally.
+### Important implementation status
+
+Some infrastructure and product surfaces are intentionally being hardened before being presented as production-ready. In particular, the ingestion pipeline, embedding provider, Qdrant indexing, grounded RAG generation, and asynchronous workers are being completed as real services rather than represented by demo data.
+
+That distinction is intentional: NURA should fail clearly when a dependency is unavailable instead of silently returning fabricated results.
+
+## Local development
 
 ### Prerequisites
-- Node.js (v18+)
-- Docker & Docker Compose (for PostgreSQL, Redis, Qdrant)
 
-### 1. Clone the Repository
+- Node.js 20+
+- Docker Desktop
+- Git
+
+### 1. Configure environment
+
+Copy the example environment file and replace development secrets as appropriate:
+
 ```bash
-git clone https://github.com/Apurbabhaumik/nura.git
-cd nura
+copy .env.example .env
 ```
 
-### 2. Start the Backend Infrastructure
-Spin up the required databases using Docker Compose.
+On macOS/Linux:
+
 ```bash
-docker-compose up -d
+cp .env.example .env
 ```
 
-### 3. Setup the Frontend
-Install dependencies and start the Next.js development server.
+### 2. Start the stack
+
 ```bash
-cd frontend
-npm install
-npm run dev
+docker compose up -d --build
 ```
-Navigate to `http://localhost:3000`. Hit `Ctrl + K` to test the command palette!
 
----
+Services:
 
-## 🔄 CI/CD Workflows
+- Frontend: `http://localhost:3001`
+- API: `http://localhost:3000`
+- API health: `http://localhost:3000/api/health`
+- API readiness: `http://localhost:3000/api/ready`
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+- Qdrant: `localhost:6333`
 
-NURA utilizes **Jenkins** for its deployment pipeline.
+### 3. Database
 
-1. **Push to `main`:** Triggers the Jenkins webhook.
-2. **Test Phase:** Runs Jest unit tests and ESLint validation across both Frontend and Backend workspaces.
-3. **Build Phase:** Compiles Next.js static assets and builds NestJS binaries. Generates isolated Docker images.
-4. **Deploy Phase:** Pushes images to AWS ECR and triggers a rolling update on AWS ECS clusters.
+For a development schema sync:
 
----
+```bash
+docker compose exec backend npx prisma db push
+```
 
-## 🤝 Contributing
+For production, use reviewed Prisma migrations rather than `db push`.
 
-We welcome contributions to make NURA the ultimate learning tool. 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+### 4. Useful commands
+
+```bash
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose down
+```
+
+## CI
+
+Every push to `main` and pull request targeting `main` runs GitHub Actions to:
+
+1. Install backend dependencies with `npm ci`.
+2. Generate the Prisma client.
+3. Build the NestJS API.
+4. Audit backend dependencies.
+5. Build the Next.js application.
+6. Audit frontend dependencies.
+7. Build both production Docker images.
+
+Cloud deployment is deliberately not claimed until the required AWS infrastructure and credentials are configured for the project.
+
+## Roadmap to full production
+
+- Real PDF, GitHub, and YouTube extraction
+- Production embedding provider
+- Qdrant collection lifecycle and persistent indexing
+- Grounded RAG with source-level citations
+- Redis/BullMQ ingestion workers
+- Persistent quiz attempts and lesson progress
+- Observability with structured logs, metrics, and tracing
+- Automated end-to-end tests
+- Managed PostgreSQL/Redis/Qdrant deployment
+- Production object storage for uploads
+- CI deployment after infrastructure is provisioned
+
+## Contributing
+
+Create a feature branch, keep changes focused, run the local build, and open a pull request against `main`.
 
 ---
 
