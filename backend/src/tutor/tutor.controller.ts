@@ -9,19 +9,17 @@ export class TutorController {
   constructor(private readonly tutorService: TutorService) {}
 
   @Post('chat')
-  async askQuestion(
-    @GetUser('id') userId: string,
-    @Body('courseId') courseId: string,
-    @Body('question') question: string,
-  ) {
+  askQuestion(@GetUser('id') userId: string, @Body('courseId') courseId: string, @Body('question') question: string) {
     return this.tutorService.askQuestion(userId, courseId, question);
   }
 
+  @Post('simplify')
+  simplifyLesson(@GetUser('id') userId: string, @Body('courseId') courseId: string, @Body('lessonId') lessonId: string) {
+    return this.tutorService.simplifyLesson(userId, courseId, lessonId);
+  }
+
   @Get('history/:courseId')
-  async getHistory(
-    @GetUser('id') userId: string,
-    @Param('courseId', ParseUUIDPipe) courseId: string,
-  ) {
+  getHistory(@GetUser('id') userId: string, @Param('courseId', ParseUUIDPipe) courseId: string) {
     return this.tutorService.getHistory(userId, courseId);
   }
 }
