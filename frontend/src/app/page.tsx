@@ -64,7 +64,11 @@ export default function NuraApp() {
   };
 
   useEffect(() => {
-    if (getStoredToken()) loadData().catch(() => { removeStoredToken(); setUser(null); });
+    if (!getStoredToken()) {
+      window.location.replace('/login');
+      return;
+    }
+    loadData().catch(() => { removeStoredToken(); window.location.replace('/login'); });
     const keyHandler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setShowCommandPalette((v) => !v); }
     };
@@ -135,7 +139,7 @@ export default function NuraApp() {
   return <div className={styles.appContainer}>
     <div className={styles.ambientBackground}><div className={styles.noiseOverlay} /></div>
     <CredBanner onAutoFill={handleAutoFillAuth} />
-    <Navbar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} setSelectedWorkspaceId={setSelectedWorkspaceId} dailyStreakDays={dashboardStats.dailyStreakDays} user={user} onSignOut={() => { removeStoredToken(); setUser(null); setWorkspaces([]); setCourses([]); setActiveCourse(null); }} onOpenAuth={() => setShowAuthModal(true)} activeTab={activeTab} setActiveTab={setActiveTab} />
+    <Navbar workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} setSelectedWorkspaceId={setSelectedWorkspaceId} dailyStreakDays={dashboardStats.dailyStreakDays} user={user} onSignOut={() => { removeStoredToken(); setUser(null); setWorkspaces([]); setCourses([]); setActiveCourse(null); window.location.replace('/login'); }} onOpenAuth={() => setShowAuthModal(true)} activeTab={activeTab} setActiveTab={setActiveTab} />
     <main className={styles.contentMain}>
       {activeTab === 'dashboard' && <><div className="animate-fade-up"><HeroQASearch activeCourse={activeCourse} onGoToTutor={() => setActiveTab('tutor')} /></div><div className="animate-fade-up delay-100"><FeatureStories onGoToIngestion={() => setActiveTab('ingestion')} onGoToTutor={() => setActiveTab('tutor')} onGoToQuizzes={() => setActiveTab('quizzes')} /></div><div className="animate-fade-up delay-200"><BigStatement /></div><div className="animate-fade-up delay-300"><DashboardTab stats={dashboardStats} courses={courses} onSelectCourse={(c) => { setActiveCourse(c); setSelectedLesson(c.modules?.[0]?.lessons?.[0] || null); setActiveTab('reader'); }} onNewCourse={() => setActiveTab('ingestion')} /></div></>}
       {activeTab === 'ingestion' && <div className="animate-fade-up"><IngestionTab ingestUrl={ingestUrl} setIngestUrl={setIngestUrl} ingestFilename={ingestFilename} setIngestFilename={setIngestFilename} isProcessing={isProcessing} processingStep={processingStep} onFileSelect={handleFileSelect} onTrigger={handleTriggerIngestion} /></div>}
