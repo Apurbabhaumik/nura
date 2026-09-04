@@ -15,23 +15,24 @@ export class TutorService {
 
   async askQuestion(userId: string, courseId: string, question: string) {
     await this.assertCourseAccess(userId, courseId);
-    if (!question?.trim()) throw new ForbiddenException('Question cannot be empty.');
-    const { answer, citations } = await this.ai.generateRagAnswer(courseId, question.trim());
-    const chat = await this.prisma.chat.create({
-      data: { userId, courseId, question: question.trim(), answer, citations: JSON.stringify(citations) },
+    const cleanQuestion = question?.trim();
+    if (!cleanQuestion) throw new ForbiddenException('Question cannot be empty.');
+
+    const history = await this.prisma.chat.findMany({
+      where: { userId, courseId }, orderBy: { createdAt: 'desc' }, take: 6,
+      select: { question: true, answer: true },
     });
-    return { id: chat.id, question: chat.question, answer: chat.answer, citations, createdAt: chat.createdAt };
+    const conversationContext = history.reverse().map((item) => `Student: ${item.question}\nTutor: ${item.answer}`).join('\n\n');
+    const result = await this.ai.generateRagAnswer(courseId, cleanQuestion, conversationContext);
+    const chat = await this.prisma.chat.create({
+      data: { userId, courseId, question: cleanQuestion, answer: result.answer, citations: JSON.stringify(result.citations) },
+    });
+    return { id: chat.id, question: chat.question, answer: chat.answer, citations: result.citations, createdAt: chat.createdAt };
   }
 
   async getHistory(userId: string, courseId: string) {
     await this.assertCourseAccess(userId, courseId);
     const chats = await this.prisma.chat.findMany({ where: { userId, courseId }, orderBy: { createdAt: 'asc' } });
-    return chats.map((c) => ({
-      id: c.id,
-      question: c.question,
-      answer: c.answer,
-      citations: c.citations ? JSON.parse(c.citations) : [],
-      createdAt: c.createdAt,
-    }));
+    return chats.map((c) => ({ id: c.id, question: c.question, answer: c.answer, citations: c.citations ? JSON.parse(c.citations) : [], createdAt: c.createdAt }));
   }
 }
