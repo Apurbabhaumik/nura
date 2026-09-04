@@ -8,17 +8,18 @@ generator client {
 }
 
 model User {
-  id           String      @id @default(uuid())
-  name         String
-  email        String      @unique
-  passwordHash String
-  role         String      @default("STUDENT")
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  workspaces   Workspace[]
-  chats        Chat[]
-  progress     Progress[]
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  role          String         @default("STUDENT")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  workspaces    Workspace[]
+  chats         Chat[]
+  progress      Progress[]
   studySessions StudySession[]
+  quizAttempts  QuizAttempt[]
 
   @@map("users")
 }
@@ -35,15 +36,15 @@ model Workspace {
 }
 
 model Course {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   title       String
   description String?
-  difficulty  String   @default("intermediate")
-  visibility  String   @default("private")
+  difficulty  String    @default("intermediate")
+  visibility  String    @default("private")
   thumbnail   String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   modules     Module[]
   uploads     Upload[]
   chats       Chat[]
@@ -90,13 +91,14 @@ model Upload {
 }
 
 model Quiz {
-  id         String     @id @default(uuid())
+  id         String        @id @default(uuid())
   lessonId   String
-  lesson     Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  difficulty String     @default("medium")
-  timeLimit  Int        @default(600)
-  createdAt  DateTime   @default(now())
+  lesson     Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  difficulty String        @default("medium")
+  timeLimit  Int           @default(600)
+  createdAt  DateTime      @default(now())
   questions  Question[]
+  attempts   QuizAttempt[]
 
   @@map("quizzes")
 }
@@ -134,6 +136,7 @@ model Chat {
   citations String?
   createdAt DateTime @default(now())
 
+  @@index([userId, courseId, createdAt])
   @@map("chats")
 }
 
@@ -149,6 +152,24 @@ model Progress {
 
   @@unique([userId, lessonId])
   @@map("progress")
+}
+
+model QuizAttempt {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quizId     String
+  quiz       Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers    String
+  feedback   String
+  score      Int
+  total      Int
+  percentage Int
+  passed     Boolean
+  createdAt  DateTime @default(now())
+
+  @@index([userId, quizId, createdAt])
+  @@map("quiz_attempts")
 }
 
 model StudySession {
