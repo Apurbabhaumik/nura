@@ -82,7 +82,10 @@ export class ParserService {
     const ignored = /(^|\/)(node_modules|dist|build|\.next|coverage|vendor|target|\.git)(\/|$)/;
     const files = (treeData.tree || [])
       .filter((item: any) => item.type === 'blob' && !ignored.test(item.path))
-      .filter((item: any) => allowedExtensions.has(String(item.path).split('.').pop()?.toLowerCase()))
+      .filter((item: any) => {
+        const extension = String(item.path).split('.').pop()?.toLowerCase();
+        return extension ? allowedExtensions.has(extension) : false;
+      })
       .filter((item: any) => !item.size || item.size <= 200_000)
       .slice(0, this.maxRepoFiles);
 
