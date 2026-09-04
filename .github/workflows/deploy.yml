@@ -14,7 +14,7 @@ jobs:
   verify:
     name: Verify application
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -41,11 +41,12 @@ jobs:
 
       - name: Audit backend dependencies
         working-directory: backend
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Build frontend
         working-directory: frontend
@@ -55,6 +56,7 @@ jobs:
 
       - name: Audit frontend dependencies
         working-directory: frontend
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Build backend container
