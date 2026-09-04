@@ -17,17 +17,18 @@ export class TutorService {
     await this.assertCourseAccess(userId, courseId);
     const cleanQuestion = question?.trim();
     if (!cleanQuestion) throw new ForbiddenException('Question cannot be empty.');
-
-    const history = await this.prisma.chat.findMany({
-      where: { userId, courseId }, orderBy: { createdAt: 'desc' }, take: 6,
-      select: { question: true, answer: true },
-    });
+    const history = await this.prisma.chat.findMany({ where: { userId, courseId }, orderBy: { createdAt: 'desc' }, take: 6, select: { question: true, answer: true } });
     const conversationContext = history.reverse().map((item) => `Student: ${item.question}\nTutor: ${item.answer}`).join('\n\n');
     const result = await this.ai.generateRagAnswer(courseId, cleanQuestion, conversationContext);
-    const chat = await this.prisma.chat.create({
-      data: { userId, courseId, question: cleanQuestion, answer: result.answer, citations: JSON.stringify(result.citations) },
-    });
+    const chat = await this.prisma.chat.create({ data: { userId, courseId, question: cleanQuestion, answer: result.answer, citations: JSON.stringify(result.citations) } });
     return { id: chat.id, question: chat.question, answer: chat.answer, citations: result.citations, createdAt: chat.createdAt };
+  }
+
+  async simplifyLesson(userId: string, courseId: string, lessonId: string) {
+    await this.assertCourseAccess(userId, courseId);
+    const lesson = await this.prisma.lesson.findFirst({ where: { id: lessonId, module: { courseId } }, select: { title: true, markdown: true } });
+    if (!lesson) throw new NotFoundException('Lesson not found.');
+    return { explanation: await this.ai.simplifyLesson(lesson.title, lesson.markdown) };
   }
 
   async getHistory(userId: string, courseId: string) {
