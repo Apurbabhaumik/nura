@@ -11,87 +11,20 @@ export interface GeneratedCoursePayload {
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly openAiKey: string; private readonly model: string; private readonly embeddingModel: string; private readonly qdrantUrl: string; private readonly qdrantCollection: string;
-
   constructor(private readonly config: ConfigService) {
-    this.openAiKey = this.config.get<string>('OPENAI_API_KEY') || '';
-    this.model = this.config.get<string>('OPENAI_MODEL') || 'gpt-5.6-luna';
-    this.embeddingModel = this.config.get<string>('OPENAI_EMBEDDING_MODEL') || 'text-embedding-3-small';
-    this.qdrantUrl = (this.config.get<string>('QDRANT_URL') || 'http://localhost:6333').replace(/\/$/, '');
-    this.qdrantCollection = this.config.get<string>('QDRANT_COLLECTION') || 'nura_chunks_v1';
+    this.openAiKey = this.config.get<string>('OPENAI_API_KEY') || ''; this.model = this.config.get<string>('OPENAI_MODEL') || 'gpt-5.6-luna'; this.embeddingModel = this.config.get<string>('OPENAI_EMBEDDING_MODEL') || 'text-embedding-3-small'; this.qdrantUrl = (this.config.get<string>('QDRANT_URL') || 'http://localhost:6333').replace(/\/$/, ''); this.qdrantCollection = this.config.get<string>('QDRANT_COLLECTION') || 'nura_chunks_v1';
   }
-
   private requireAi() { if (!this.openAiKey) throw new ServiceUnavailableException('AI is not configured. Add OPENAI_API_KEY to the backend environment.'); }
-
-  private async openAi(path: string, body: unknown): Promise<any> {
-    this.requireAi();
-    const response = await fetch(`https://api.openai.com/v1/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${this.openAiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) { this.logger.error(`OpenAI ${path} failed: ${response.status} ${JSON.stringify(data).slice(0, 700)}`); throw new ServiceUnavailableException('The AI provider could not complete the request.'); }
-    return data;
-  }
-
-  private extractOutputText(response: any): string {
-    if (typeof response?.output_text === 'string') return response.output_text.trim();
-    return (response?.output || []).flatMap((item: any) => item?.content || []).map((content: any) => content?.text).filter((text: any) => typeof text === 'string').join('\n').trim();
-  }
-
-  private async generateEmbedding(text: string): Promise<number[]> {
-    const data = await this.openAi('embeddings', { model: this.embeddingModel, input: text });
-    const embedding = data.data?.[0]?.embedding;
-    if (!Array.isArray(embedding) || !embedding.length) throw new ServiceUnavailableException('AI embeddings were unavailable.');
-    return embedding;
-  }
-
-  private hashToUuid(value: string): string {
-    const hex = createHash('sha256').update(value).digest('hex').slice(0, 32);
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`;
-  }
-
-  chunkText(text: string, chunkSize = 1000, overlap = 150): string[] {
-    const chunks: string[] = []; let start = 0;
-    while (start < text.length) { let end = Math.min(start + chunkSize, text.length); if (end < text.length) { const breakPos = Math.max(text.lastIndexOf('\n', end), text.lastIndexOf('. ', end)); if (breakPos > start + chunkSize / 2) end = breakPos + 1; } const chunk = text.slice(start, end).trim(); if (chunk.length > 20) chunks.push(chunk); if (end >= text.length) break; start = Math.max(end - overlap, start + 1); }
-    return chunks;
-  }
-
-  private async ensureCollection(vectorSize: number) {
-    const existing = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}`).catch(() => null);
-    if (existing?.ok) { const info: any = await existing.json().catch(() => null); const size = info?.result?.config?.params?.vectors?.size; if (typeof size === 'number' && size !== vectorSize) throw new ServiceUnavailableException(`Qdrant collection ${this.qdrantCollection} has dimension ${size}, but the configured embedding model returns ${vectorSize}. Use a new collection name.`); return; }
-    const created = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vectors: { size: vectorSize, distance: 'Cosine' } }) });
-    if (!created.ok && created.status !== 409) throw new ServiceUnavailableException('Vector database is unavailable.');
-  }
-
-  async indexCourseChunks(courseId: string, text: string, title: string): Promise<number> {
-    const chunks = this.chunkText(text); if (!chunks.length) return 0; const points: any[] = [];
-    for (let index = 0; index < chunks.length; index++) { const vector = await this.generateEmbedding(chunks[index]); await this.ensureCollection(vector.length); points.push({ id: this.hashToUuid(`${courseId}:${index}:${chunks[index]}`), vector, payload: { courseId, text: chunks[index], title, chunkIndex: index + 1 } }); }
-    for (let offset = 0; offset < points.length; offset += 64) { const response = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}/points`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: points.slice(offset, offset + 64), wait: true }) }); if (!response.ok) throw new ServiceUnavailableException('Vector database indexing failed.'); }
-    this.logger.log(`Indexed ${points.length} chunks for course ${courseId}`); return points.length;
-  }
-
-  async searchVectorStore(courseId: string, query: string, topK = 5) {
-    const vector = await this.generateEmbedding(query);
-    const response = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}/points/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vector, limit: topK, with_payload: true, filter: { must: [{ key: 'courseId', match: { value: courseId } }] } }) }).catch(() => null);
-    if (!response?.ok) return []; const data: any = await response.json();
-    return (data.result || []).map((item: any) => ({ text: item.payload?.text || '', score: Number(item.score || 0), metadata: { chunkIndex: item.payload?.chunkIndex, title: item.payload?.title } }));
-  }
-
-  async generateCourseStructure(rawText: string, titleHint?: string): Promise<GeneratedCoursePayload> {
-    const response = await this.openAi('responses', { model: this.model, input: [
-      { role: 'developer', content: 'You are NURA, an expert instructional designer. Create a rigorous course from the supplied source. Do not invent facts not supported by the source. Return ONLY valid JSON matching the requested shape.' },
-      { role: 'user', content: `Create a learning course from this source. Title hint: ${titleHint || 'Untitled'}\n\nReturn JSON with title, description, difficulty, modules[]. Each module has title, order, lessons[]. Each lesson has title, markdown, estimatedTime, flashcards[{front,back}], and quiz{difficulty,timeLimit,questions[{question,answer,options,type}]}. Include 2-5 modules, 2-4 lessons per module, 2-4 flashcards per lesson, and 3-5 multiple-choice questions per lesson. Keep answers grounded in the source.\n\nSOURCE:\n${rawText.slice(0, 50000)}` },
-    ], max_output_tokens: 12000 });
-    const text = this.extractOutputText(response);
-    try { const parsed = JSON.parse(text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim()) as GeneratedCoursePayload; if (!parsed.title || !Array.isArray(parsed.modules)) throw new Error('Invalid course JSON'); return parsed; }
-    catch { this.logger.error(`AI returned invalid course JSON: ${text.slice(0, 500)}`); throw new ServiceUnavailableException('AI generated an invalid course structure. Please retry.'); }
-  }
-
-  async generateRagAnswer(courseId: string, question: string, conversationContext = '') {
-    const context = await this.searchVectorStore(courseId, question, 5); if (!context.length) throw new ServiceUnavailableException('No indexed course material is available for this course yet.');
-    const contextText = context.map((c: any, i: number) => `[Source ${i + 1}] ${c.text}`).join('\n\n');
-    const response = await this.openAi('responses', { model: this.model, input: [
-      { role: 'developer', content: 'You are NURA Tutor. Answer only from the supplied course context. If the context does not contain the answer, say you cannot find it in the course. Use the conversation only to understand references; do not treat previous answers as authoritative. Be concise but explain reasoning. Cite sources inline as [Source 1], [Source 2], etc.' },
-      { role: 'user', content: `RECENT CONVERSATION:\n${conversationContext || '(none)'}\n\nCOURSE CONTEXT:\n${contextText}\n\nQUESTION:\n${question}` },
-    ], max_output_tokens: 1200 });
-    const answer = this.extractOutputText(response); if (!answer) throw new ServiceUnavailableException('AI returned an empty answer.');
-    return { answer, citations: context.map((c: any, idx: number) => ({ chunkIndex: c.metadata?.chunkIndex || idx + 1, snippet: c.text.slice(0, 160) + (c.text.length > 160 ? '…' : ''), relevanceScore: `${Math.round(c.score * 100)}%` })) };
-  }
+  private async openAi(path: string, body: unknown): Promise<any> { this.requireAi(); const response = await fetch(`https://api.openai.com/v1/${path}`, { method: 'POST', headers: { Authorization: `Bearer ${this.openAiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json().catch(() => ({})); if (!response.ok) { this.logger.error(`OpenAI ${path} failed: ${response.status} ${JSON.stringify(data).slice(0, 700)}`); throw new ServiceUnavailableException('The AI provider could not complete the request.'); } return data; }
+  private extractOutputText(response: any): string { if (typeof response?.output_text === 'string') return response.output_text.trim(); return (response?.output || []).flatMap((item: any) => item?.content || []).map((content: any) => content?.text).filter((text: any) => typeof text === 'string').join('\n').trim(); }
+  private async generateEmbedding(text: string): Promise<number[]> { const data = await this.openAi('embeddings', { model: this.embeddingModel, input: text }); const embedding = data.data?.[0]?.embedding; if (!Array.isArray(embedding) || !embedding.length) throw new ServiceUnavailableException('AI embeddings were unavailable.'); return embedding; }
+  private hashToUuid(value: string): string { const hex = createHash('sha256').update(value).digest('hex').slice(0, 32); return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20)}`; }
+  chunkText(text: string, chunkSize = 1000, overlap = 150): string[] { const chunks: string[] = []; let start = 0; while (start < text.length) { let end = Math.min(start + chunkSize, text.length); if (end < text.length) { const breakPos = Math.max(text.lastIndexOf('\n', end), text.lastIndexOf('. ', end)); if (breakPos > start + chunkSize / 2) end = breakPos + 1; } const chunk = text.slice(start, end).trim(); if (chunk.length > 20) chunks.push(chunk); if (end >= text.length) break; start = Math.max(end - overlap, start + 1); } return chunks; }
+  private async ensureCollection(vectorSize: number) { const existing = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}`).catch(() => null); if (existing?.ok) { const info: any = await existing.json().catch(() => null); const size = info?.result?.config?.params?.vectors?.size; if (typeof size === 'number' && size !== vectorSize) throw new ServiceUnavailableException(`Qdrant collection ${this.qdrantCollection} has dimension ${size}, but the configured embedding model returns ${vectorSize}. Use a new collection name.`); return; } const created = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vectors: { size: vectorSize, distance: 'Cosine' } }) }); if (!created.ok && created.status !== 409) throw new ServiceUnavailableException('Vector database is unavailable.'); }
+  async indexCourseChunks(courseId: string, text: string, title: string): Promise<number> { const chunks = this.chunkText(text); if (!chunks.length) return 0; const points: any[] = []; for (let index = 0; index < chunks.length; index++) { const vector = await this.generateEmbedding(chunks[index]); await this.ensureCollection(vector.length); points.push({ id: this.hashToUuid(`${courseId}:${index}:${chunks[index]}`), vector, payload: { courseId, text: chunks[index], title, chunkIndex: index + 1 } }); } for (let offset = 0; offset < points.length; offset += 64) { const response = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}/points`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: points.slice(offset, offset + 64), wait: true }) }); if (!response.ok) throw new ServiceUnavailableException('Vector database indexing failed.'); } return points.length; }
+  async searchVectorStore(courseId: string, query: string, topK = 5) { const vector = await this.generateEmbedding(query); const response = await fetch(`${this.qdrantUrl}/collections/${this.qdrantCollection}/points/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vector, limit: topK, with_payload: true, filter: { must: [{ key: 'courseId', match: { value: courseId } }] } }) }).catch(() => null); if (!response?.ok) return []; const data: any = await response.json(); return (data.result || []).map((item: any) => ({ text: item.payload?.text || '', score: Number(item.score || 0), metadata: { chunkIndex: item.payload?.chunkIndex, title: item.payload?.title } })); }
+  private async generateJson(prompt: string, maxTokens: number) { const response = await this.openAi('responses', { model: this.model, input: [{ role: 'developer', content: 'Return only valid JSON. Do not wrap it in markdown fences.' }, { role: 'user', content: prompt }], max_output_tokens: maxTokens }); return this.extractOutputText(response); }
+  async generateCourseStructure(rawText: string, titleHint?: string): Promise<GeneratedCoursePayload> { const text = await this.generateJson(`You are NURA, an expert instructional designer. Create a rigorous course from the supplied source without inventing unsupported facts. Title hint: ${titleHint || 'Untitled'}\n\nReturn JSON with title, description, difficulty, modules[]. Each module has title, order, lessons[]. Each lesson has title, markdown, estimatedTime, flashcards[{front,back}], and quiz{difficulty,timeLimit,questions[{question,answer,options,type}]}. Include 2-5 modules, 2-4 lessons per module, 2-4 flashcards and 3-5 MCQs per lesson.\n\nSOURCE:\n${rawText.slice(0, 50000)}`, 12000); try { const parsed = JSON.parse(text) as GeneratedCoursePayload; if (!parsed.title || !Array.isArray(parsed.modules)) throw new Error('Invalid course JSON'); return parsed; } catch { this.logger.error(`AI returned invalid course JSON: ${text.slice(0, 500)}`); throw new ServiceUnavailableException('AI generated an invalid course structure. Please retry.'); } }
+  async simplifyLesson(title: string, markdown: string) { const text = await this.openAi('responses', { model: this.model, input: [{ role: 'developer', content: 'You are NURA. Simplify a lesson for a beginner while preserving all important facts. Use short paragraphs and concrete analogies. Do not add unsupported facts.' }, { role: 'user', content: `LESSON: ${title}\n\n${markdown.slice(0, 30000)}` }], max_output_tokens: 1800 }); const answer = this.extractOutputText(text); if (!answer) throw new ServiceUnavailableException('AI returned an empty explanation.'); return answer; }
+  async generateRagAnswer(courseId: string, question: string, conversationContext = '') { const context = await this.searchVectorStore(courseId, question, 5); if (!context.length) throw new ServiceUnavailableException('No indexed course material is available for this course yet.'); const contextText = context.map((c: any, i: number) => `[Source ${i + 1}] ${c.text}`).join('\n\n'); const response = await this.openAi('responses', { model: this.model, input: [{ role: 'developer', content: 'You are NURA Tutor. Answer only from the supplied course context. If the context does not contain the answer, say you cannot find it in the course. Use the conversation only to understand references; do not treat previous answers as authoritative. Cite sources inline as [Source 1], [Source 2], etc.' }, { role: 'user', content: `RECENT CONVERSATION:\n${conversationContext || '(none)'}\n\nCOURSE CONTEXT:\n${contextText}\n\nQUESTION:\n${question}` }], max_output_tokens: 1200 }); const answer = this.extractOutputText(response); if (!answer) throw new ServiceUnavailableException('AI returned an empty answer.'); return { answer, citations: context.map((c: any, idx: number) => ({ chunkIndex: c.metadata?.chunkIndex || idx + 1, snippet: c.text.slice(0, 160) + (c.text.length > 160 ? '…' : ''), relevanceScore: `${Math.round(c.score * 100)}%` })) }; }
 }
