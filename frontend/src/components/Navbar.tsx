@@ -32,26 +32,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         NURA<span>.</span>
       </a>
 
-      {/* Centered Minimalist Tabs */}
       <nav style={{ display: 'flex', gap: '2rem' }}>
-        <button className={activeTab === 'dashboard' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('dashboard')}>
-          Dashboard
-        </button>
-        <button className={activeTab === 'ingestion' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('ingestion')}>
-          Ingest
-        </button>
-        <button className={activeTab === 'reader' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('reader')}>
-          Reader
-        </button>
-        <button className={activeTab === 'tutor' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('tutor')}>
-          Tutor
-        </button>
-        <button className={activeTab === 'quizzes' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('quizzes')}>
-          Assessments
-        </button>
-        <button className={activeTab === 'analytics' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('analytics')}>
-          Analytics
-        </button>
+        <button className={activeTab === 'dashboard' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+        <button className={activeTab === 'ingestion' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('ingestion')}>Ingest</button>
+        <button className={activeTab === 'reader' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('reader')}>Reader</button>
+        <button className={activeTab === 'tutor' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('tutor')}>Tutor</button>
+        <button className={activeTab === 'quizzes' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('quizzes')}>Assessments</button>
+        <button className={activeTab === 'analytics' ? `${styles.tabBtn} ${styles.tabBtnActive}` : styles.tabBtn} onClick={() => setActiveTab('analytics')}>Analytics</button>
       </nav>
 
       <div className={styles.navControls}>
@@ -60,11 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           value={selectedWorkspaceId}
           onChange={(e) => setSelectedWorkspaceId(e.target.value)}
         >
-          {workspaces.map((ws) => (
-            <option key={ws.id} value={ws.id} style={{ background: '#000', color: '#fff' }}>
-              [{ws.name}]
-            </option>
-          ))}
+          {workspaces.map((ws) => <option key={ws.id} value={ws.id} style={{ background: '#000', color: '#fff' }}>[{ws.name}]</option>)}
         </select>
 
         {user ? (
@@ -72,9 +55,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             [EXIT: {user.name.split(' ')[0]}]
           </button>
         ) : (
-          <button className={styles.primaryBtn} onClick={onOpenAuth}>
-            Initialize
-          </button>
+          <a href="/login" className={styles.primaryBtn} style={{ textDecoration: 'none' }} onClick={(e) => { e.preventDefault(); onOpenAuth(); }}>
+            Sign in
+          </a>
         )}
       </div>
     </header>
