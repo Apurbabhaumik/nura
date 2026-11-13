@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from "@nestjs/common";
 
 export interface ParsedContent {
   title: string;
@@ -12,23 +12,27 @@ export interface ParsedContent {
 export class ParserService {
   private readonly logger = new Logger(ParserService.name);
 
-  async parseFile(filename: string, fileType: string, buffer?: Buffer): Promise<ParsedContent> {
+  async parseFile(
+    filename: string,
+    fileType: string,
+    buffer?: Buffer,
+  ): Promise<ParsedContent> {
     this.logger.log(`Parsing file: ${filename} (type: ${fileType})`);
-    
+
     // Process text content based on file extension / mime type
-    let extractedText = '';
-    
+    let extractedText = "";
+
     if (buffer) {
-      extractedText = buffer.toString('utf-8');
+      extractedText = buffer.toString("utf-8");
     } else {
       extractedText = `Extracted sample content for ${filename}. This document covers foundational concepts, advanced architectures, implementation patterns, and practical code exercises for learning.`;
     }
 
     // Clean text by stripping unprintable characters
     const cleanText = this.cleanText(extractedText);
-    
+
     return {
-      title: filename.replace(/\.[^/.]+$/, ''),
+      title: filename.replace(/\.[^/.]+$/, ""),
       text: cleanText,
       sourceType: fileType.toUpperCase(),
       wordCount: cleanText.split(/\s+/).filter(Boolean).length,
@@ -38,11 +42,11 @@ export class ParserService {
 
   async parseGitHubRepo(repoUrl: string): Promise<ParsedContent> {
     this.logger.log(`Parsing GitHub repository: ${repoUrl}`);
-    const repoName = repoUrl.split('/').slice(-2).join('/');
-    
+    const repoName = repoUrl.split("/").slice(-2).join("/");
+
     const mockRepoContent = `
 # Repository: ${repoName}
-TeachStack Repository Documentation and Codebase Structure.
+Nura Repository Documentation and Codebase Structure.
 
 ## Overview
 Modular monolith architecture built with TypeScript, NestJS backend, Next.js frontend, PostgreSQL, Redis, Qdrant vector database, and BullMQ queue processing.
@@ -58,7 +62,7 @@ Modular monolith architecture built with TypeScript, NestJS backend, Next.js fro
     return {
       title: `GitHub: ${repoName}`,
       text: mockRepoContent,
-      sourceType: 'GITHUB',
+      sourceType: "GITHUB",
       wordCount: mockRepoContent.split(/\s+/).length,
       metadata: { repoUrl, parsedAt: new Date().toISOString() },
     };
@@ -75,15 +79,18 @@ Third, LLM prompt engineering formats responses with structured JSON outputs and
     `.trim();
 
     return {
-      title: 'YouTube Lecture Video Transcript',
+      title: "YouTube Lecture Video Transcript",
       text: mockTranscript,
-      sourceType: 'YOUTUBE',
+      sourceType: "YOUTUBE",
       wordCount: mockTranscript.split(/\s+/).length,
       metadata: { videoUrl, parsedAt: new Date().toISOString() },
     };
   }
 
   private cleanText(text: string): string {
-    return text.replace(/[\r\n]+/g, '\n').replace(/\s+/g, ' ').trim();
+    return text
+      .replace(/[\r\n]+/g, "\n")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 }
